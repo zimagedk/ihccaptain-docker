@@ -4,21 +4,43 @@ TAG_BASE="zimagedk/ihccaptain"
 
 # Change to none-beta when released
 DOWNLOAD_URL_BASE="https://jemi.dk/ihc/beta/download.php?file="
-# Determine latest automatically
-RELEASE_FILE="IHCCaptain_2.0.1_linux-x64_20260303-0824.zip"
+UPDATE_CHECK_URL="https://jemi.dk/ihc/beta/update.php"
 SUPPLIED_FILE=""
 
 HERE="$(dirname "$(realpath $0)")"
 BUILD="${HERE}/build"
-BINARY="${BUILD}/goihccap"
-PUSH=false
+VERSION_FILE="${BUILD}/latest_version"
+KNOWN_VERSION=""
+VERSION=""
 
-rm -rf "${BUILD}"
+BUILDER=""
+BUILD_CMD="build"
+
+BINARY="${BUILD}/goihccap"
+
+TEMP_DIR="$(mktemp -d)"
+
+PUSH=false
+FORCE=false
+
 mkdir -p "${BUILD}"
+
+error() {
+    echo "$*" 1>&2
+}
+
+leaving() {
+    rm -rf "${TEMP_DIR}"
+}
+
+trap leaving EXIT
 
 while [ -n "${1:-}" ]; do
     if [ "${1}" = "--push" ]; then
         PUSH=true
+        shift
+    elif [ "${1}" = "--force" ]; then
+        FORCE=true
         shift
     elif [ -r "${1}" ]; then
         SUPPLIED_FILE="${1}"
@@ -26,72 +48,120 @@ while [ -n "${1:-}" ]; do
     fi
 done
 
-if [ -n "${SUPPLIED_FILE}" ]; then
-    RELEASE_FILE="${SUPPLIED_FILE}"
-else
-    curl -get "${DOWNLOAD_URL_BASE}${RELEASE_FILE}" --output "/tmp/${RELEASE_FILE}"
-    RELEASE_FILE="/tmp/${RELEASE_FILE}"
-    trap rm "'/tmp/${RELEASE_FILE}'" EXIT
+get_release_file() {
+
+    VERSION="$(curl --get --fail --no-progress-meter "${UPDATE_CHECK_URL}" | jq -r '.latest_version')"
+
+    if ! $FORCE && [ -z "${VERSION}" ]; then
+        error "Unable to get latest available version"
+        exit 1
+    fi
+
+    # Check om fil findes, ellers hent
+
+    if ! $FORCE && [ "${KNOWN_VERSION}" = "${VERSION}" ]; then
+        echo "Already on latest version"
+        exit 0
+    fi
+
+    # TODO map til filnavn
+    find "${BUILD}" -maxdepth 1 -name "*.zip" -exec rm -f {} \;
+}
+
+if [ -r "${VERSION_FILE}" ]; then
+    . "${VERSION_FILE}"
 fi
 
-unzip -nq -d "${BUILD}" "${RELEASE_FILE}"
+if [ -z "${SUPPLIED_FILE}" ]; then
+    RELEASE_FILE="$(get_release_file)"
+else
+    RELEASE_FILE="${SUPPLIED_FILE}"
+    VERSION="${KNOWN_VERSION}"
+fi
 
-readarray -t APPS_UNPACKED < <(ls -1 "${BUILD}")
+if [ -z "${RELEASE_FILE}" ] || [ ! -r "${RELEASE_FILE}" ]; then
+    echo "Release file not found: '${RELEASE_FILE}'"
+    exit 1
+fi
+
+if [[ "${RELEASE_FILE}" != *"${VERSION}"*  ]]; then
+    error "Release file name must contain the version: ${VERSION}"
+    exit 2
+fi
+
+unzip -nq -d "${TEMP_DIR}" "${RELEASE_FILE}"
+
+readarray -t APPS_UNPACKED < <(ls -1 "${TEMP_DIR}")
 
 if [ "${#APPS_UNPACKED[@]}" -ne 1 ]; then
     echo "Archive should contain exactly one file, but found: ${APPS_UNPACKED[*]}"
     exit 1
 fi
 
-APP_UNPACKED="${BUILD}/${APPS_UNPACKED[0]}"
+APP_UNPACKED="${TEMP_DIR}/${APPS_UNPACKED[0]}"
 
 if ! file "${APP_UNPACKED}" | grep -q "executable.*x86-64"; then
     echo "Unpacked file $(basename "${APP_UNPACKED}") is not a 64-bit executable"
     exit 1
 fi
 
-VERSION="$(echo "${RELEASE_FILE}" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")"
 MAJOR="$(echo "${VERSION}" | grep -oE "^[0-9]+")"
 MINOR="$(echo "${VERSION}" | grep -oE "^[0-9]+\.[0-9]+")"
 LABEL="$(echo "${RELEASE_FILE}" | grep -oE "[0-9]+-[0-9]+")"
 
-# ARGS=(build)
 # if which buildah >/dev/null; then
 #     BUILDER=buildah
-# elif which podman >/dev/null; then
-#     BUILDER=podman
-# elif which docker >/dev/null; then
+if which podman >/dev/null; then
+    BUILDER=podman
+elif which docker >/dev/null; then
     BUILDER=docker
-# else
-#     echo "No builder found, please install builah, podman or docker"
-#     exit 1
-# fi
+else
+    echo "No means of building the image found, please install buildah, podman or docker"
+    exit 1
+fi
+
+TAGS=(latest "${MAJOR}" "${MINOR}" "${VERSION}")
+if [ -n "${LABEL}" ]; then
+    TAGS+=("${VERSION}-$LABEL")
+fi
 
 echo ""
+echo "############################"
 echo "Building using ${BUILDER}"
-echo ""
-echo "Version tags: $MAJOR, $MINOR, $VERSION, ${VERSION}-$LABEL"
+echo "Version tags: ${TAGS[*]}"
+echo "############################"
 echo ""
 
 mv "${APP_UNPACKED}" "${BINARY}"
 chmod +x "${BINARY}"
 
-cp "${HERE}/Dockerfile" "${BUILD}/"
+cp "${HERE}/Containerfile" "${BUILD}/"
+
+BUILD_ARGS=(--file "Containerfile")
+
+for tag in "${TAGS[@]}"; do
+    BUILD_ARGS+=(--tag "${TAG_BASE}:${tag}")
+done
 
 "${BUILDER}" build \
-    --tag "${TAG_BASE}:${MAJOR}" \
-    --tag "${TAG_BASE}:${MINOR}" \
-    --tag "${TAG_BASE}:${VERSION}" \
-    --tag "${TAG_BASE}:${VERSION}-${LABEL}" \
-    --tag "${TAG_BASE}:latest" \
+    "${BUILD_ARGS[@]}" \
     "${BUILD}"
 
 if $PUSH; then
-    # ID="$(docker images --format "{{.ID}} {{.Repository}}:{{.Tag}}" | grep "${TAG_BASE}:latest" | awk '{print $1}')"
-    # docker push --all-tags "${ID}"
-    docker push "${TAG_BASE}:${MAJOR}"
-    docker push "${TAG_BASE}:${MINOR}"
-    docker push "${TAG_BASE}:${VERSION}"
-    docker push "${TAG_BASE}:${VERSION}-${LABEL}"
-    docker push "${TAG_BASE}:latest"
+
+    echo "############################"
+    echo " Pushing to remote registry"
+    echo "############################"
+    echo ""
+
+    for t in "${TAGS[@]}"; do
+        tag="${TAG_BASE}:${t}"
+        echo "Pushing to remote registry: ${tag}"
+       "${BUILDER}" push "${tag}"
+    done
+
+    if ! $FORCE && [ "${KNOWN_VERSION}" != "${VERSION}" ]; then
+        # Update latest built version, if everything went well
+        echo "KNOWN_VERSION=${VERSION}" > "${VERSION_FILE}"
+    fi
 fi
