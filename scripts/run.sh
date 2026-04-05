@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 
+# Script for local testing
+
+set -euo pipefail
+
 TAG_BASE="zimagedk/ihccaptain"
 VERSION=latest
 PORT=9000
 
-HERE="$(dirname "$(realpath $0)")"
-DATA_FOLDER="${HERE}/run/podman"
+WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
+DATA_FOLDER="${WORKSPACE}/run/podman"
 
 mkdir -p "${DATA_FOLDER}"
 

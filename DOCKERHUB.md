@@ -28,4 +28,4 @@ Running a container with data mounted to a path on the host, and ports mapped to
 docker run -d --name ihc-captain -v /path/on/host:/app/data -p8080:80 -p8443:443 zimagedk/ihccaptain:latest
 ```
 
-See [IHC Captain Installation Guide for Docker](https://jemi.dk/ihc/beta/install-guide.html#docker) for additional configuration details.
+See [IHC Captain Installation Guide for Docker](https://jemi.dk/ihc/beta/install-guide.html#docker) for information about configuration using environment variables.

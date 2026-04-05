@@ -1,6 +1,9 @@
 # Use a minimal Linux base image
 FROM alpine:3
 
+ARG TARGETARCH
+ARG BINARY
+
 # Install certificates for secure external connections (like Pushover/HTTPS) and timezones
 RUN apk --no-cache upgrade && \
     apk --no-cache add \
@@ -13,9 +16,9 @@ RUN mkdir -p /app/data
 
 # Set the working directory inside the container
 WORKDIR /app
-ADD goihccap /app
+ADD "${BINARY}" /app/goihcapp
 
-ENTRYPOINT [ "/app/goihccap" ]
+ENTRYPOINT [ "/app/goihcapp" ]
 
 # Expose HTTP and HTTPS ports
 EXPOSE 80
