@@ -6,8 +6,8 @@ set -euo pipefail
 GET_VERSION_URL="https://jemi.dk/ihc/beta/update.php"
 UPDATE_CHECK_URL="${GET_VERSION_URL}?v=0.0.0&os=linux&arch=@ARCH@"
 
-if [ -z "${WORKSPACE}" ]; then
-    WORKSPACE="$(dirname "$(realpath $0)")"
+if [ -z "${WORKSPACE:-}" ]; then
+    WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
 fi
 
 ACTION="${1:-}"

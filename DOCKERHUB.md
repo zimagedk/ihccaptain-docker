@@ -4,8 +4,11 @@ These images wraps the IHC Captain application by [Mikkel Skovgaard](https://jem
 
 A big thanks to Mikkel for picking up after Schneider dropped the ball on all us who have based the lighting of our houses on IHC.
 
+Build recipe can be found on [GitHub](https://github.com/zimagedk/ihccaptain-docker)
+
 ## Image tags
-All images are tagged during build, with the version of IHC Captain included.
+
+Images are tagged during build, based on the IHC Captain version included.
 Tags set: `latest`, `major`, `major.minor`, `major.minor.patch`.
 All tags, but the last, may be moved on next update
 
