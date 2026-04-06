@@ -35,6 +35,10 @@ green() {
     echo -e "\e[0;32m$*\e[0m"
 }
 
+heading() {
+    echo -e "\n\e[0;32m### $* ###\e[0m\n"
+}
+
 error() {
     red "$*" 1>&2
 }
@@ -95,6 +99,7 @@ build_image() {
 }
 
 remove_tags() {
+    heading "Image cleanup"
     for tag in "$@"; do
         if "${BUILDER}" manifest exists "${tag}"; then
             "${BUILDER}" manifest rm "${tag}"
@@ -110,9 +115,7 @@ remove_tags() {
 
 push_image() {
 
-    green """
-Pushing to remote registry
-"""
+    heading "Pushing to remote registry"
 
     for tag in "${FULL_TAGS[@]}"; do
         green "Pushing to remote registry: ${tag}"
@@ -122,8 +125,6 @@ Pushing to remote registry
     remove_tags "${FULL_TAGS[@]}"
 }
 
-# if which buildah >/dev/null; then
-#     BUILDER=buildah
 if which podman >/dev/null; then
     BUILDER=podman
 elif which docker >/dev/null; then
@@ -160,6 +161,11 @@ elif [ ! -d "${BUILD}" ]; then
     exit 1
 fi
 
+if [ "${#ARCHIVES[@]}" -ne 2 ]; then
+    echo "Two binary archives must be specified, was: '${ARCHIVES[*]}'"
+    exit 1
+fi
+
 rm -rf "${BUILD_IMG}"
 mkdir -p "${BUILD_IMG}"
 
@@ -185,33 +191,29 @@ green """
 ##################################
  Building using ${BUILDER}
  Version tags: ${TAGS[*]}
-##################################
-"""
+##################################"""
 
-green "Building for AMD64\n"
+heading "Building for AMD64"
 
 build_image amd64 "${BINARY_64}"
 
-green """
-Building for AMD64
-"""
+heading "Building for AMD64"
 
 build_image arm64 "${BINARY_ARM}"
 
-green """
-Creating image manifest
-"""
+heading "Creating image manifest"
 
 VERSION_TAG="${TAG_BASE}:${VERSION}"
 
-"${BUILDER}" manifest create "${VERSION_TAG}"
-"${BUILDER}" manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:amd64"
-"${BUILDER}" manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:arm64"
+id="$("${BUILDER}" manifest create "${VERSION_TAG}")"
+"${BUILDER}" manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:amd64" >/dev/null
+"${BUILDER}" manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:arm64" >/dev/null
 
 "${BUILDER}" tag "${VERSION_TAG}" "${FULL_TAGS[@]}"
 
+green "Image id:  ${id}"
 for tag in "${FULL_TAGS[@]}"; do
-    green "Build tag: ${tag}"
+    green "Image tag: ${tag}"
 done
 
 echo ""
