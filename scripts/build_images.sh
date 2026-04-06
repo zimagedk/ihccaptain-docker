@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# This script builds the images
+
 set -euo pipefail
 
 TAG_BASE="zimagedk/ihccaptain"

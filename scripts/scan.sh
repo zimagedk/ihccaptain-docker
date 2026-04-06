@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# This script performs a vulnerability scan of the specified image
+
 set -uo pipefail
 
 WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"

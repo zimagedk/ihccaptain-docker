@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# This scripts can be used for running cron jobs
+
 set -euo pipefail
 
 WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
@@ -13,6 +15,7 @@ usage() {
     echo """
   Usage: ${0} action [<option>..]
   It can send an email after the action, provided that local mail delivery is correctly set up
+  
   Actions:
     build              Build images, of new version available
     scan               Scan for security vulnerabilities of last built version
@@ -52,7 +55,7 @@ leaving() {
 
 SCANNED_BODY="""
 
-The image vas scanned, see atteched log for result
+The image vas scanned, see attached log for result
 
 """
 

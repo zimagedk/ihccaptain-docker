@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# This script is used for interacting with the IHC Captain update/download site
+
 set -euo pipefail
 
 # Change to none-beta when released
@@ -33,6 +35,7 @@ error() {
 usage() {
     echo """
   Usage: ${0} <command> <options>
+  
   Commands:
     known-version                   Return the current known version
     check-version                   Checks if there's a new version remote
