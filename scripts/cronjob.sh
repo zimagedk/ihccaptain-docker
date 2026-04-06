@@ -4,21 +4,34 @@ set -euo pipefail
 
 WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
 
+BUILD=false
+SCAN=false
 EMAIL=""
 ALWAYS=false
 
 usage() {
     echo """
-  Usage: ${0} [<option>..]
-  It can send an email after build, provided that local mail delivery is correctly set up
+  Usage: ${0} action [<option>..]
+  It can send an email after the action, provided that local mail delivery is correctly set up
+  Actions:
+    build              Build images, of new version available
+    scan               Scan for security vulnerabilities of last built version
   Options:
     --email            Email address to send the build result to in case of new version built
     --always           Always send email; not only on new build
     """
 }
 
+COMMAND="${1:-}"
+
 while [ -n "${1:-}" ]; do
     case "${1}" in
+    build)
+        BUILD=true
+        ;;
+    scan)
+        SCAN=true
+        ;;
     --email)
         EMAIL="${2}"
         shift
@@ -37,7 +50,11 @@ leaving() {
     rm -rf "${TEMP_DIR}"
 }
 
-UPDATED_SUBJECT="New IHC Captain image built"
+SCANNED_BODY="""
+
+The image vas scanned, see atteched log for result
+
+"""
 
 UPDATED_BODY="""
 
@@ -45,8 +62,6 @@ A new IHC Captain image was built.
 See attached log file.
 
 """
-
-NOOP_SUBJECT="IHC Captain image unchanged"
 
 NOOP_BODY="""
 
@@ -64,18 +79,39 @@ send_email() {
 
 prev_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
 
-"${WORKSPACE}/build.sh" build --push 2>&1 | tee "${LOG_FILE}"
-
-new_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
+if $BUILD; then
+    "${WORKSPACE}/build.sh" build --push 2>&1 | tee "${LOG_FILE}"
+    new_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
+    if [ "${prev_version}" != "${new_version}" ]; then
+        log_message="Sending update mail to ${EMAIL}"
+        subject="New IHC Captain image built: ${prev_version} -> ${new_version}"
+        body="${UPDATED_BODY}"
+    elif $ALWAYS; then
+        log_message="Sending noop mail to ${EMAIL}"
+        subject="IHC Captain image unchanged: ${prev_version}"
+        body="${NOOP_BODY}"
+    fi
+elif $SCAN; then
+    body="${SCANNED_BODY}"
+    image="$("${WORKSPACE}/scripts/build_images.sh" "${prev_version}" --get-tag)"
+    "${WORKSPACE}/scripts/scan.sh" "${image}" 2>&1 | tee "${LOG_FILE}"
+    if [ "$?" -ne 0 ]; then
+        log_message="Sending scanned mail to ${EMAIL}"
+        subject="IHC Captain vulnerability found for image: ${image}"
+    elif $ALWAYS; then
+        log_message="Sending scannned mail to ${EMAIL}"
+        subject="IHC Captain image scanned: ${image}"
+    fi
+else
+    echo "Unknown command: ${COMMAND}"
+    exit 1
+fi
 
 if [ -z "${EMAIL}" ]; then
     exit 0
 fi
 
-if [ "${prev_version}" != "${new_version}" ]; then
-    echo "Sending update mail to ${EMAIL}"
-    send_email "${UPDATED_SUBJECT}: ${prev_version} -> ${new_version}" "${UPDATED_BODY}"
-elif $ALWAYS; then
-    echo "Sending noop mail to ${EMAIL}"
-    send_email "${NOOP_SUBJECT}: ${prev_version}" "${NOOP_BODY}"
+if [ -n "${log_message:-}" ]; then
+    echo "${log_message}"
+    send_email "${subject}" "${body}"
 fi

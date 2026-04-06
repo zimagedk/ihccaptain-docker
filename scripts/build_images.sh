@@ -19,8 +19,10 @@ TEMP_DIR="$(mktemp -d)"
 
 usage() {
     echo """
-  Usage: ${0} <version> <work folder> <amd64 archive> <arm64 archive>
-  Usage: ${0} <version> --push
+  Usage:
+  - ${0} <version> <work folder> <amd64 archive> <arm64 archive>
+  - ${0} <version> --push
+  - ${0} <version> --get-tag
 
   Builds a multi-architecture OCI image for IHC Captain
   The order of the archives may be swapped
@@ -122,7 +124,10 @@ push_image() {
         "${BUILDER}" manifest push --all "${tag}"
     done
 
-    remove_tags "${FULL_TAGS[@]}"
+}
+
+create_tag() {
+    echo "${TAG_BASE}:${VERSION}"
 }
 
 if which podman >/dev/null; then
@@ -150,7 +155,10 @@ for tag in "${TAGS[@]}"; do
     FULL_TAGS+=("${TAG_BASE}:${tag}")
 done
 
-if [ "${BUILD}" = "--push" ]; then
+if [ "${BUILD}" = "--get-tag" ]; then
+    create_tag
+    exit 0
+elif [ "${BUILD}" = "--push" ]; then
     push_image
     exit $?
 elif [ -z "${1:-}" ]; then
