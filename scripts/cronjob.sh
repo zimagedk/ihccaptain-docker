@@ -6,6 +6,7 @@ set -euo pipefail
 
 WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
 
+SENDER=""
 BUILD=false
 SCAN=false
 EMAIL=""
@@ -21,6 +22,7 @@ usage() {
     scan               Scan for security vulnerabilities of last built version
   Options:
     --email            Email address to send the build result to in case of new version built
+    --sender <address> Senders email address
     --always           Always send email; not only on new build
     """
 }
@@ -37,6 +39,10 @@ while [ -n "${1:-}" ]; do
         ;;
     --email)
         EMAIL="${2}"
+        shift
+        ;;
+    --sender)
+        SENDER="${2}"
         shift
         ;;
     --always)
@@ -75,9 +81,12 @@ No new IHC Captain image was built.
 send_email() {
     local subject="${1}"
     local body="${2}"
-    echo -e "${body}" | mail -s "${subject}" \
-        --attach "${LOG_FILE}" \
-        "${EMAIL}"
+    local args=(-s "${subject}" \
+        --attach "${LOG_FILE}")
+    if [ -n "${SENDER}" ]; then
+        args+=("-aFrom:${SENDER}")
+    fi
+    echo -e "${body}" | mail "${args[@]}" "${EMAIL}"
 }
 
 prev_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
@@ -97,8 +106,7 @@ if $BUILD; then
 elif $SCAN; then
     body="${SCANNED_BODY}"
     image="$("${WORKSPACE}/scripts/build_images.sh" "${prev_version}" --get-tag)"
-    "${WORKSPACE}/scripts/scan.sh" "${image}" 2>&1 | tee "${LOG_FILE}"
-    if [ "$?" -ne 0 ]; then
+    if ! "${WORKSPACE}/scripts/scan.sh" "${image}" 2>&1 | tee "${LOG_FILE}"; then
         log_message="Sending scanned mail to ${EMAIL}"
         subject="IHC Captain vulnerability found for image: ${image}"
     elif $ALWAYS; then

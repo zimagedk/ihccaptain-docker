@@ -12,7 +12,6 @@ shift 2
 ARCHIVES=("$@")
 
 BUILD_IMG="${BUILD}/image"
-BUILDER=""
 
 BINARY_64="${BUILD_IMG}/goihcapp.amd64"
 BINARY_ARM="${BUILD_IMG}/goihcapp.arm"
@@ -93,7 +92,7 @@ unpack_file() {
 build_image() {
     local arch="${1}"
     local binary="${2}"
-    "${BUILDER}" build \
+    buildah build \
         --file Containerfile \
         --platform "linux/${arch}" \
         --build-arg "TARGETARCH=${arch}" \
@@ -105,9 +104,7 @@ build_image() {
 remove_tags() {
     heading "Image cleanup"
     for tag in "$@"; do
-        if "${BUILDER}" manifest exists "${tag}"; then
-            "${BUILDER}" manifest rm "${tag}"
-        fi
+        buildah manifest rm "${tag}" >/dev/null 2>&1 || true
     done
 
     for tag in "localhost/ihccaptain:amd64" "localhost/ihccaptain:arm64"; do
@@ -123,7 +120,7 @@ push_image() {
 
     for tag in "${FULL_TAGS[@]}"; do
         green "Pushing to remote registry: ${tag}"
-        "${BUILDER}" manifest push --all "${tag}"
+        buildah manifest push --all "${tag}"
     done
 
 }
@@ -131,15 +128,6 @@ push_image() {
 create_tag() {
     echo "${TAG_BASE}:${VERSION}"
 }
-
-if which podman >/dev/null; then
-    BUILDER=podman
-elif which docker >/dev/null; then
-    BUILDER=docker
-else
-    echo "No means of building the image found, please install buildah, podman or docker"
-    exit 1
-fi
 
 if [[ "${VERSION}" =~ ^(([0-9]+)\.[0-9]+)\.[0-9]+ ]] ; then
     MINOR="${BASH_REMATCH[1]}"
@@ -199,7 +187,7 @@ cp "${WORKSPACE}/Containerfile" "${BUILD_IMG}"
 
 green """
 ##################################
- Building using ${BUILDER}
+ Building:     ${VERSION}
  Version tags: ${TAGS[*]}
 ##################################"""
 
@@ -207,7 +195,7 @@ heading "Building for AMD64"
 
 build_image amd64 "${BINARY_64}"
 
-heading "Building for AMD64"
+heading "Building for ARM64"
 
 build_image arm64 "${BINARY_ARM}"
 
@@ -215,11 +203,11 @@ heading "Creating image manifest"
 
 VERSION_TAG="${TAG_BASE}:${VERSION}"
 
-id="$("${BUILDER}" manifest create "${VERSION_TAG}")"
-"${BUILDER}" manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:amd64" >/dev/null
-"${BUILDER}" manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:arm64" >/dev/null
+id="$(buildah manifest create "${VERSION_TAG}")"
+buildah manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:amd64" >/dev/null
+buildah manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:arm64" >/dev/null
 
-"${BUILDER}" tag "${VERSION_TAG}" "${FULL_TAGS[@]}"
+buildah tag "${VERSION_TAG}" "${FULL_TAGS[@]}"
 
 green "Image id:  ${id}"
 for tag in "${FULL_TAGS[@]}"; do
