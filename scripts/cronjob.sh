@@ -5,6 +5,7 @@
 set -euo pipefail
 
 WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
+SCAN_OUTPUT="${WORKSPACE}/build/scan"
 
 SENDER=""
 BUILD=false
@@ -54,6 +55,10 @@ done
 
 TEMP_DIR="$(mktemp -d)"
 LOG_FILE="${TEMP_DIR}/build.log"
+EMAIL_ARGS=(-A "${LOG_FILE}")
+
+rm -rf "${SCAN_OUTPUT}"
+mkdir -p "${SCAN_OUTPUT}"
 
 leaving() {
     rm -rf "${TEMP_DIR}"
@@ -81,8 +86,8 @@ No new IHC Captain image was built.
 send_email() {
     local subject="${1}"
     local body="${2}"
-    local args=(-s "${subject}" \
-        --attach "${LOG_FILE}")
+    shift 2
+    local args=(-s "${subject}" "${EMAIL_ARGS[@]}")
     if [ -n "${SENDER}" ]; then
         args+=("-aFrom:${SENDER}")
     fi
@@ -106,9 +111,12 @@ if $BUILD; then
 elif $SCAN; then
     body="${SCANNED_BODY}"
     image="$("${WORKSPACE}/scripts/build_images.sh" "${prev_version}" --get-tag)"
-    if ! "${WORKSPACE}/scripts/scan.sh" "${image}" 2>&1 | tee "${LOG_FILE}"; then
+    if ! "${WORKSPACE}/scripts/scan.sh" "${SCAN_OUTPUT}" "${image}" 2>&1 | tee "${LOG_FILE}"; then
         log_message="Sending scanned mail to ${EMAIL}"
         subject="IHC Captain vulnerability found for image: ${image}"
+        for report in "${SCAN_OUTPUT}/"*; do
+            EMAIL_ARGS+=(-A "${report}")
+        done
     elif $ALWAYS; then
         log_message="Sending scannned mail to ${EMAIL}"
         subject="IHC Captain image scanned: ${image}"
