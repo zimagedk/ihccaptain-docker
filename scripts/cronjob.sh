@@ -114,11 +114,11 @@ elif $SCAN; then
     if ! "${WORKSPACE}/scripts/scan.sh" "${SCAN_OUTPUT}" "${image}" 2>&1 | tee "${LOG_FILE}"; then
         log_message="Sending scanned mail to ${EMAIL}"
         subject="IHC Captain vulnerability found for image: ${image}"
-        for report in "${SCAN_OUTPUT}/"*; do
+        while read -r report; do
             EMAIL_ARGS+=(-A "${report}")
-        done
+        done < <(find "${SCAN_OUTPUT}/" -name "*.html")
     elif $ALWAYS; then
-        log_message="Sending scannned mail to ${EMAIL}"
+        log_message="Sending scanned mail to ${EMAIL}"
         subject="IHC Captain image scanned: ${image}"
     fi
 else
