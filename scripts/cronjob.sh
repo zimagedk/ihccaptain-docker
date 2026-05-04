@@ -29,8 +29,6 @@ usage() {
 }
 
 TEMP_DIR="$(mktemp -d)"
-LOG_FILE="${TEMP_DIR}/build.log"
-EMAIL_ARGS=(-A "${LOG_FILE}")
 
 COMMAND="${1:-}"
 
@@ -38,11 +36,11 @@ while [ -n "${1:-}" ]; do
     case "${1}" in
     build)
         BUILD=true
-        LOG_FILE="${TEMP_DIR}/cronjob_build.log"
+        LOG_FILE="${TEMP_DIR}/build.log"
         ;;
     scan)
         SCAN=true
-        LOG_FILE="${TEMP_DIR}/cronjob_scan.log"
+        LOG_FILE="${TEMP_DIR}/scan.log"
         ;;
     --email)
         EMAIL="${2}"
@@ -58,6 +56,8 @@ while [ -n "${1:-}" ]; do
     esac
     shift
 done
+
+EMAIL_ARGS=(-A "${LOG_FILE}")
 
 rm -rf "${SCAN_OUTPUT}"
 mkdir -p "${SCAN_OUTPUT}"
