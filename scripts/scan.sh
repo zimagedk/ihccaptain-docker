@@ -30,7 +30,11 @@ mkdir -p "${CACHE_FOLDER}"
 scan_arch() {
     local arch="${1}"
     local platform="linux/${arch}"
-    podman run -ti --rm \
+    local podman_args=(--rm)
+    if tty -s; then
+        podman_args+=(-ti)
+    fi
+    podman run "${podman_args[@]}" \
         -v "${CACHE_FOLDER}:/root/.cache/" \
         -v "${OUTPUT_FOLDER}:/root/report" \
         "${TRIVY_IMAGE}" image \
