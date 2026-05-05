@@ -57,6 +57,12 @@ while [ -n "${1:-}" ]; do
     shift
 done
 
+if [ -z "${COMMAND}" ]; then
+    echo "No action provided"
+    usage
+    exit 1
+fi
+
 EMAIL_ARGS=(-A "${LOG_FILE}")
 
 rm -rf "${SCAN_OUTPUT}"
@@ -118,7 +124,7 @@ elif $SCAN; then
         subject="IHC Captain vulnerability found for image: ${image}"
         while read -r report; do
             EMAIL_ARGS+=(-A "${report}")
-        done < <(find "${SCAN_OUTPUT}/" -name "*.html")
+        done < <(find "${SCAN_OUTPUT}" -name "*.html")
     elif $ALWAYS; then
         log_message="Sending scanned mail to ${EMAIL}"
         subject="IHC Captain image scanned: ${image}"
