@@ -91,6 +91,10 @@ No new IHC Captain image was built.
 
 """
 
+log() {
+    echo "$(date --iso-8601=seconds) $*"
+}
+
 send_email() {
     local subject="${1}"
     local body="${2}"
@@ -105,6 +109,7 @@ send_email() {
 prev_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
 
 if $BUILD; then
+    log "Starting IHC Captain Image build"
     "${WORKSPACE}/build.sh" build --push 2>&1 | tee "${LOG_FILE}"
     new_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
     if [ "${prev_version}" != "${new_version}" ]; then
@@ -117,6 +122,7 @@ if $BUILD; then
         body="${NOOP_BODY}"
     fi
 elif $SCAN; then
+    log "Starting IHC Captain Image scan"
     body="${SCANNED_BODY}"
     image="$("${WORKSPACE}/scripts/build_images.sh" "${prev_version}" --get-tag)"
     if ! "${WORKSPACE}/scripts/scan.sh" "${SCAN_OUTPUT}" "${image}" 2>&1 | tee "${LOG_FILE}"; then

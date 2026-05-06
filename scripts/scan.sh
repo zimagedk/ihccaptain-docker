@@ -23,6 +23,10 @@ if [ -z "${OUTPUT_FOLDER}" ]; then
     exit 1
 fi
 
+log() {
+    echo "$(date --iso-8601=seconds) $*"
+}
+
 podman pull "${TRIVY_IMAGE}"
 
 mkdir -p "${CACHE_FOLDER}"
@@ -36,6 +40,8 @@ scan_arch() {
         runner=docker
         run_args+=(-ti)
     fi
+    log "Running: ${runner} run ${run_args[*]}" \
+
     "${runner}" run "${run_args[@]}" \
         -v "${CACHE_FOLDER}:/root/.cache/" \
         -v "${OUTPUT_FOLDER}:/root/report" \
