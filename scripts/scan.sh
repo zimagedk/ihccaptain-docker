@@ -36,8 +36,9 @@ scan_arch() {
     local platform="linux/${arch}"
     local run_args=(--rm)
     local runner=podman
-    if tty -s; then
+    if [ -z "${XDG_SESSION_ID:-}" ]; then
         runner=docker
+    else
         run_args+=(-ti)
     fi
     log "Running: ${runner} run ${run_args[*]}" \
@@ -46,7 +47,7 @@ scan_arch() {
         -v "${CACHE_FOLDER}:/root/.cache/" \
         -v "${OUTPUT_FOLDER}:/root/report" \
         "${TRIVY_IMAGE}" image \
-        "--platform=${platform}" \
+        --platform "${platform}" \
         --skip-version-check \
         --scanners vuln \
         --exit-code 67 \

@@ -145,6 +145,6 @@ if [ -z "${EMAIL}" ]; then
 fi
 
 if [ -n "${log_message:-}" ]; then
-    echo "${log_message}"
+    log "${log_message}"
     send_email "${subject}" "${body}"
 fi
