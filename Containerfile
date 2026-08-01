@@ -1,5 +1,7 @@
+ARG FROM_IMAGE=""
+
 # Use a minimal Linux base image
-FROM alpine:3
+FROM "${FROM_IMAGE}"
 
 ARG TARGETARCH
 ARG BINARY

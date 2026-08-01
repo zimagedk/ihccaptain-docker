@@ -4,19 +4,26 @@
 
 set -euo pipefail
 
+ALPINE_MAJOR="3"
+ALPINE_BASE="docker.io/library/alpine"
 TAG_BASE="zimagedk/ihccaptain"
 
-VERSION="${1:-}"
-BUILD="${2:-}"
-shift 2
-ARCHIVES=("$@")
+LOCAL_AMD64_TAG="localhost/ihccaptain:amd64"
+LOCAL_ARM64_TAG="localhost/ihccaptain:arm64"
 
-BUILD_IMG="${BUILD}/image"
+KNOWN_VERSION=""
 
-BINARY_64="${BUILD_IMG}/goihcapp.amd64"
-BINARY_ARM="${BUILD_IMG}/goihcapp.arm"
+if [ -z "${WORKSPACE:-}" ]; then
+    WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
+fi
 
+VERSION_FILE="${WORKSPACE}/.alpine_version"
 TEMP_DIR="$(mktemp -d)"
+
+if [ -r "${VERSION_FILE}" ]; then
+    # shellcheck disable=SC1090
+    . "${VERSION_FILE}"
+fi
 
 usage() {
     echo """
@@ -90,11 +97,13 @@ unpack_file() {
 }
 
 build_image() {
-    local arch="${1}"
-    local binary="${2}"
+    local from_image="${1}"
+    local arch="${2}"
+    local binary="${3}"
     buildah build \
         --file Containerfile \
         --platform "linux/${arch}" \
+        --build-arg "FROM_IMAGE=${from_image}" \
         --build-arg "TARGETARCH=${arch}" \
         --build-arg "BINARY=$(basename "${binary}")" \
         --tag "ihccaptain:${arch}" \
@@ -107,7 +116,7 @@ remove_tags() {
         buildah manifest rm "${tag}" >/dev/null 2>&1 || true
     done
 
-    for tag in "localhost/ihccaptain:amd64" "localhost/ihccaptain:arm64"; do
+    for tag in "${LOCAL_AMD64_TAG}" "${LOCAL_ARM64_TAG}"; do
         if podman images | grep -q "${tag}"; then
             podman rmi "${tag}"
         fi
@@ -122,12 +131,46 @@ push_image() {
         green "Pushing to remote registry: ${tag}"
         buildah manifest push --all "${tag}"
     done
+}
 
+determine_alpine_version() {
+    podman search --list-tags --limit 10000 --format "{{.Tag}}" "${ALPINE_BASE}" | grep -E "^${ALPINE_MAJOR}" | sort -V | tail -n1
+}
+
+save_alpine_version() {
+    echo "KNOWN_VERSION=${1}" > "${VERSION_FILE}"
 }
 
 create_tag() {
     echo "${TAG_BASE}:${VERSION}"
 }
+
+if [ -z "${1:-}" ]; then
+    red "No arguments provided"
+    usage
+    exit 1
+fi
+
+if [ "${1}" == "latest-tag" ]; then
+    echo "${TAG_BASE}:latest"
+    exit
+elif [ "${1}" == "alpine-version-remote" ]; then
+    determine_alpine_version
+    exit
+elif [ "${1}" == "alpine-version-local" ]; then
+    echo "${KNOWN_VERSION}"
+    exit
+fi
+
+VERSION="${1:-}"
+BUILD="${2:-}"
+shift 2
+ARCHIVES=("$@")
+
+BUILD_IMG="${BUILD}/image"
+
+BINARY_64="${BUILD_IMG}/goihcapp.amd64"
+BINARY_ARM="${BUILD_IMG}/goihcapp.arm"
 
 if [[ "${VERSION}" =~ ^(([0-9]+)\.[0-9]+)\.[0-9]+ ]] ; then
     MINOR="${BASH_REMATCH[1]}"
@@ -137,7 +180,15 @@ else
     exit 2
 fi
 
-TAGS=(latest "${MAJOR}" "${MINOR}" "${VERSION}")
+ALPINE_VERSION="$(determine_alpine_version)"
+
+TAGS=(latest \
+    "${MAJOR}" \
+    "${MINOR}" \
+    "${VERSION}" \
+    "${MAJOR}-alpine-${ALPINE_VERSION}" \
+    "${MINOR}-alpine-${ALPINE_VERSION}" \
+    "${VERSION}-alpine-${ALPINE_VERSION}")
 
 FULL_TAGS=()
 
@@ -185,27 +236,33 @@ remove_tags "${FULL_TAGS[@]}"
 
 cp "${WORKSPACE}/Containerfile" "${BUILD_IMG}"
 
-green """
-##################################
- Building:     ${VERSION}
- Version tags: ${TAGS[*]}
-##################################"""
+green "#########################"
+green " App:    ${VERSION}"
+green " Alpine: ${ALPINE_VERSION}"
+green " Tags:"
+for tag in "${TAGS[@]}"; do
+    green "   ${tag}"
+done
+
+green "#########################"
+
+FROM_IMAGE="${ALPINE_BASE}:${ALPINE_VERSION}"
 
 heading "Building for AMD64"
 
-build_image amd64 "${BINARY_64}"
+build_image "${FROM_IMAGE}" amd64 "${BINARY_64}"
 
 heading "Building for ARM64"
 
-build_image arm64 "${BINARY_ARM}"
+build_image "${FROM_IMAGE}" arm64 "${BINARY_ARM}"
 
 heading "Creating image manifest"
 
 VERSION_TAG="${TAG_BASE}:${VERSION}"
 
 id="$(buildah manifest create "${VERSION_TAG}")"
-buildah manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:amd64" >/dev/null
-buildah manifest add --all "${VERSION_TAG}" "containers-storage:localhost/ihccaptain:arm64" >/dev/null
+buildah manifest add --all "${VERSION_TAG}" "containers-storage:${LOCAL_AMD64_TAG}" >/dev/null
+buildah manifest add --all "${VERSION_TAG}" "containers-storage:${LOCAL_ARM64_TAG}" >/dev/null
 
 buildah tag "${VERSION_TAG}" "${FULL_TAGS[@]}"
 
@@ -213,5 +270,7 @@ green "Image id:  ${id}"
 for tag in "${FULL_TAGS[@]}"; do
     green "Image tag: ${tag}"
 done
+
+save_alpine_version "${ALPINE_VERSION}"
 
 echo ""

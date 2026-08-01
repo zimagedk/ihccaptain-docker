@@ -12,6 +12,7 @@ TRIVY_IMAGE="docker.io/aquasec/trivy:canary"
 
 OUTPUT_FOLDER="${1:-}"
 IMAGE="${2:-}"
+RUN_ARGS=(--rm)
 
 if [ -z "${IMAGE}" ]; then
     echo "No image specified"
@@ -27,23 +28,12 @@ log() {
     echo "$(date --iso-8601=seconds) $*"
 }
 
-podman pull "${TRIVY_IMAGE}"
-
-mkdir -p "${CACHE_FOLDER}"
-
 scan_arch() {
     local arch="${1}"
     local platform="linux/${arch}"
-    local run_args=(--rm)
-    local runner=podman
-    if [ -z "${XDG_SESSION_ID:-}" ]; then
-        runner=docker
-    else
-        run_args+=(-ti)
-    fi
-    log "Running: ${runner} run ${run_args[*]}" \
+    log "Running: ${RUNNER} run ${RUN_ARGS[*]}" \
 
-    "${runner}" run "${run_args[@]}" \
+    "${RUNNER}" run "${RUN_ARGS[@]}" \
         -v "${CACHE_FOLDER}:/root/.cache/" \
         -v "${OUTPUT_FOLDER}:/root/report" \
         "${TRIVY_IMAGE}" image \
@@ -58,6 +48,20 @@ scan_arch() {
 }
 
 ok=true
+
+# Handles issue running podman in cronjob
+RUNNER=podman
+if [ -z "${XDG_SESSION_ID:-}" ]; then
+    RUNNER=docker
+else
+    RUN_ARGS+=(-ti)
+    # shellcheck disable=SC1090
+    . "${HOME}/.profile"
+fi
+
+"${RUNNER}" pull "${TRIVY_IMAGE}"
+
+mkdir -p "${CACHE_FOLDER}"
 
 scan_arch "amd64" || ok=false
 scan_arch "arm64" || ok=false
