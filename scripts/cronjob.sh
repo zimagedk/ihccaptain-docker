@@ -11,9 +11,10 @@ SENDER=""
 BUILD=false
 BUILD_FORCE=false
 SCAN=false
-SCAN_VULNERABILITY_FOUND=false
+RERUN_TO_BUILD=false
 EMAIL=""
 ALWAYS=false
+SEND_EMAIL=false
 
 usage() {
     echo """
@@ -102,14 +103,23 @@ log() {
 }
 
 send_email() {
-    local subject="${1}"
+    local subj="${1}"
     local body="${2}"
     shift 2
-    local args=(-s "${subject}" "${EMAIL_ARGS[@]}")
+    local args=(-s "${subj}" "${EMAIL_ARGS[@]}")
     if [ -n "${SENDER}" ]; then
         args+=("-aFrom:${SENDER}")
     fi
     echo -e "${body}" | mail "${args[@]}" "${EMAIL}"
+}
+
+log_and_send_email() {
+    if [ -n "${log_message:-}" ]; then
+        log "${log_message}"
+    fi
+    if $SEND_EMAIL && [ -n "${EMAIL}" ]; then
+        send_email "$@"
+    fi
 }
 
 prev_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
@@ -123,10 +133,12 @@ if $BUILD; then
     "${WORKSPACE}/build.sh" "${build_args[@]}" 2>&1 | tee "${LOG_FILE}"
     new_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
     if [ "${prev_version}" != "${new_version}" ]; then
+        SEND_EMAIL=true
         log_message="Sending update mail to ${EMAIL}"
         subject="New IHC Captain image built: ${prev_version} -> ${new_version}"
         body="${UPDATED_BODY}"
     elif $ALWAYS; then
+        SEND_EMAIL=true
         log_message="Sending noop mail to ${EMAIL}"
         subject="IHC Captain image unchanged: ${prev_version}"
         body="${NOOP_BODY}"
@@ -135,14 +147,25 @@ elif $SCAN; then
     log "Starting IHC Captain Image scan"
     body="${SCANNED_BODY}"
     image="$("${WORKSPACE}/scripts/build_images.sh" latest-tag)"
+
     if ! "${WORKSPACE}/scripts/scan.sh" "${SCAN_OUTPUT}" "${image}" 2>&1 | tee "${LOG_FILE}"; then
-        SCAN_VULNERABILITY_FOUND=true
+
+        SEND_EMAIL=true
         log_message="Sending scanned mail to ${EMAIL}"
         subject="IHC Captain vulnerability found for image: ${image}"
+
         while read -r report; do
             EMAIL_ARGS+=(-A "${report}")
         done < <(find "${SCAN_OUTPUT}" -name "*.html")
+
+        local_version="$("${WORKSPACE}/scripts/build_images.sh" alpine-version-local)"
+        remote_version="$("${WORKSPACE}/scripts/build_images.sh" alpine-version-remote)"
+
+        if [ "${local_version}" != "${remote_version}" ]; then
+            RERUN_TO_BUILD=true
+        fi
     elif $ALWAYS; then
+        SEND_EMAIL=true
         log_message="Sending scanned mail to ${EMAIL}"
         subject="IHC Captain image scanned: ${image}"
     fi
@@ -151,21 +174,10 @@ else
     exit 1
 fi
 
-if [ -n "${EMAIL}" ]; then
-    if [ -n "${log_message:-}" ]; then
-        log "${log_message}"
-        send_email "${subject}" "${body}"
-    fi
-fi
+if $RERUN_TO_BUILD; then
+    log "Rebuilding IHC Captain ${prev_version} with alpine ${remote_version}"
 
-if $SCAN_VULNERABILITY_FOUND; then
-    local_version="$("${WORKSPACE}/scripts/build_images.sh" alpine-version-local)"
-    remote_version="$("${WORKSPACE}/scripts/build_images.sh" alpine-version-remote)"
-
-    if [ "${local_version}" = "${remote_version}" ]; then
-        echo "No new remote alpine image version; no reason to rebuild"
-        exit
-    fi
+    log_and_send_email "${subject:-} (rebuilding)" "${body:-}"
 
     args=(build --force)
     [ -z "${EMAIL}" ] || args+=(--email "${EMAIL}")
@@ -175,3 +187,5 @@ if $SCAN_VULNERABILITY_FOUND; then
     fi
     exec $0 "${args[@]}"
 fi
+
+log_and_send_email "${subject:-}" "${body:-}"
