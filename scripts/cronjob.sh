@@ -14,6 +14,7 @@ SCAN=false
 EMAIL=""
 ALWAYS=false
 SEND_EMAIL=false
+NOOUT=false
 
 usage() {
     echo """
@@ -28,6 +29,7 @@ usage() {
     --email            Email address to send the build result to in case of new version built
     --sender <address> Senders email address
     --always           Always send email; not only on new build
+    --noout            Don't push images or send mail
     """
 }
 
@@ -58,6 +60,9 @@ while [ -n "${1:-}" ]; do
         ;;
     --always)
         ALWAYS=true
+        ;;
+    --noout)
+        NOOUT=true
         ;;
     esac
     shift
@@ -111,8 +116,11 @@ send_email() {
     if [ -n "${SENDER}" ]; then
         args+=("-aFrom:${SENDER}")
     fi
-#    echo "#### SEND EMAIL DUMMY #### subject=${subj}"
-    echo -e "${body}" | mail "${args[@]}" "${EMAIL}"
+    if $NOOUT; then
+        echo "#### NOOUT MAIL ### subject=${subj}"
+    else
+        echo -e "${body}" | mail "${args[@]}" "${EMAIL}"
+    fi
 }
 
 log_and_send_email() {
@@ -126,8 +134,10 @@ log_and_send_email() {
 
 build() {
     log "Starting IHC Captain Image build"
-    build_args=(build --push)
     build_args=(build)
+    if ! $NOOUT; then
+        build_args+=(--push)
+    fi
     if $BUILD_FORCE; then
         build_args+=(--force)
     fi

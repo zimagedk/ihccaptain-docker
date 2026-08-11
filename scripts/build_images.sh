@@ -30,7 +30,6 @@ usage() {
   Usage:
   - ${0} <version> <work folder> <amd64 archive> <arm64 archive>
   - ${0} <version> --push
-  - ${0} <version> --get-tag
 
   Builds a multi-architecture OCI image for IHC Captain
   The order of the archives may be swapped
@@ -141,10 +140,6 @@ save_alpine_version() {
     echo "KNOWN_VERSION=${1}" > "${VERSION_FILE}"
 }
 
-create_tag() {
-    echo "${TAG_BASE}:${VERSION}"
-}
-
 if [ -z "${1:-}" ]; then
     red "No arguments provided"
     usage
@@ -196,10 +191,7 @@ for tag in "${TAGS[@]}"; do
     FULL_TAGS+=("${TAG_BASE}:${tag}")
 done
 
-if [ "${BUILD}" = "--get-tag" ]; then
-    create_tag
-    exit 0
-elif [ "${BUILD}" = "--push" ]; then
+if [ "${BUILD}" = "--push" ]; then
     push_image
     exit $?
 elif [ -z "${1:-}" ]; then
