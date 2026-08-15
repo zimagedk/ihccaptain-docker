@@ -13,8 +13,7 @@ BUILD_FORCE=false
 SCAN=false
 EMAIL=""
 ALWAYS=false
-SEND_EMAIL=false
-NOOUT=false
+NODEPLOY=false
 
 usage() {
     echo """
@@ -29,7 +28,7 @@ usage() {
     --email            Email address to send the build result to in case of new version built
     --sender <address> Senders email address
     --always           Always send email; not only on new build
-    --noout            Don't push images or send mail
+    --nodeploy         Don't push images
     """
 }
 
@@ -61,8 +60,8 @@ while [ -n "${1:-}" ]; do
     --always)
         ALWAYS=true
         ;;
-    --noout)
-        NOOUT=true
+    --nodeploy)
+        NODEPLOY=true
         ;;
     esac
     shift
@@ -116,18 +115,15 @@ send_email() {
     if [ -n "${SENDER}" ]; then
         args+=("-aFrom:${SENDER}")
     fi
-    if $NOOUT; then
-        echo "#### NOOUT MAIL ### subject=${subj}"
-    else
-        echo -e "${body}" | mail "${args[@]}" "${EMAIL}"
-    fi
+    echo -e "${body}" | mail "${args[@]}" "${EMAIL}"
 }
 
 log_and_send_email() {
     if [ -n "${log_message:-}" ]; then
         log "${log_message}"
     fi
-    if $SEND_EMAIL && [ -n "${EMAIL}" ]; then
+
+    if [ -n "${EMAIL}" ]; then
         send_email "$@"
     fi
 }
@@ -135,7 +131,7 @@ log_and_send_email() {
 build() {
     log "Starting IHC Captain Image build"
     build_args=(build)
-    if ! $NOOUT; then
+    if ! $NODEPLOY; then
         build_args+=(--push)
     fi
     if $BUILD_FORCE; then
@@ -144,11 +140,9 @@ build() {
     "${WORKSPACE}/build.sh" "${build_args[@]}" 2>&1 | tee "${LOG_FILE}"
     new_version="$("${WORKSPACE}/scripts/remote.sh" known-version)"
     if $BUILD_FORCE || [ "${known_version}" != "${new_version}" ]; then
-        SEND_EMAIL=true
         log_message="Sending update mail to ${EMAIL}"
         log_and_send_email "New IHC Captain image built: ${known_version} -> ${new_version}" "${UPDATED_BODY}"
     elif $ALWAYS; then
-        SEND_EMAIL=true
         log_message="Sending noop mail to ${EMAIL}"
         log_and_send_email "IHC Captain image unchanged: ${known_version}" "${NOOP_BODY}"
     fi
@@ -186,6 +180,9 @@ rebuild() {
     [ -z "${SENDER}" ] || args+=(--sender "${SENDER}")
     if $ALWAYS; then
         args+=(--always)
+    fi
+    if $NODEPLOY; then
+        args+=(--nodeploy)
     fi
     exec $0 "${args[@]}"
 }

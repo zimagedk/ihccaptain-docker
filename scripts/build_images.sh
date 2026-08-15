@@ -116,8 +116,8 @@ remove_tags() {
     done
 
     for tag in "${LOCAL_AMD64_TAG}" "${LOCAL_ARM64_TAG}"; do
-        if podman images | grep -q "${tag}"; then
-            podman rmi "${tag}"
+        if buildah images | grep -q "${tag}"; then
+            buildah rmi "${tag}"
         fi
     done
 }
@@ -133,7 +133,7 @@ push_image() {
 }
 
 determine_alpine_version() {
-    podman search --list-tags --limit 10000 --format "{{.Tag}}" "${ALPINE_BASE}" | grep -E "^${ALPINE_MAJOR}" | sort -V | tail -n1
+    skopeo list-tags "${ALPINE_BASE}" | jq -rc 'Tags[]' | grep -E "^${ALPINE_MAJOR}" | sort -V | tail -n1
 }
 
 save_alpine_version() {
