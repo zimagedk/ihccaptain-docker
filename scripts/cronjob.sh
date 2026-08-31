@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 
-# This scripts can be used for running cron jobs
+# This script can be used for running cron jobs
 
 set -euo pipefail
 
 WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
 SCAN_OUTPUT="${WORKSPACE}/build/scan"
 
+ME="$0"
 SENDER=""
 BUILD=false
 BUILD_FORCE=false
 SCAN=false
 EMAIL=""
+LOG_FILE=""
 ALWAYS=false
 NODEPLOY=false
 
 usage() {
     echo """
-  Usage: ${0} action [<option>..]
+  Usage: ${ME} action [<option>..]
   It can send an email after the action, provided that local mail delivery is correctly set up
-  
+
   Actions:
     build              Build images, of new version available
     scan               Scan for security vulnerabilities of last built version
@@ -73,7 +75,10 @@ if [ -z "${COMMAND}" ]; then
     exit 1
 fi
 
-EMAIL_ARGS=(-A "${LOG_FILE}")
+EMAIL_ARGS=()
+if [ -n "${LOG_FILE}" ]; then
+    EMAIL_ARGS=(-A "${LOG_FILE}")
+fi
 
 rm -rf "${SCAN_OUTPUT}"
 mkdir -p "${SCAN_OUTPUT}"
@@ -184,7 +189,7 @@ rebuild() {
     if $NODEPLOY; then
         args+=(--nodeploy)
     fi
-    exec $0 "${args[@]}"
+    "$ME" "${args[@]}"
 }
 
 if $BUILD; then
@@ -192,7 +197,8 @@ if $BUILD; then
     exit $?
 elif $SCAN; then
     if ! scan; then
-        rebuild
+        export BUILD_FORCE=true
+        build
     fi
 else
     echo "Unknown command: ${COMMAND}"

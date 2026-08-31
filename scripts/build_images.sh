@@ -6,7 +6,7 @@ set -euo pipefail
 
 ALPINE_MAJOR="3"
 ALPINE_BASE="docker.io/library/alpine"
-TAG_BASE="zimagedk/ihccaptain"
+TAG_BASE="docker.io/zimagedk/ihccaptain"
 
 LOCAL_AMD64_TAG="localhost/ihccaptain:amd64"
 LOCAL_ARM64_TAG="localhost/ihccaptain:arm64"
@@ -36,6 +36,10 @@ usage() {
     """
 }
 
+log() {
+    echo "$(date --iso-8601=seconds) $*"
+}
+
 red() {
     echo -e "\e[0;31m$*\e[0m"
 }
@@ -49,7 +53,7 @@ heading() {
 }
 
 error() {
-    red "$*" 1>&2
+    log "$(red $*)" 1>&2
 }
 
 leaving() {
@@ -62,7 +66,7 @@ unpack_file() {
     local archive="${1:-}"
     local binary
     if [ -z "${archive}" ] || [ ! -r "${archive}" ]; then
-        echo "Release file not found: '${archive}'"
+        error "Release file not found: '${archive}'"
         exit 1
     fi
 
@@ -77,7 +81,7 @@ unpack_file() {
     readarray -t content < <(ls -1 "${TEMP_DIR}")
 
     if [ "${#content[@]}" -ne 1 ]; then
-        echo "Archives should contain exactly one file, but found: ${content[*]}"
+        error "Archives should contain exactly one file, but found: ${content[*]}"
         exit 1
     fi
 
@@ -90,7 +94,7 @@ unpack_file() {
         mv "${binary}" "${BINARY_ARM}"
         chmod +x "${BINARY_ARM}"
     else
-        echo "Unpacked file $(basename "${binary}") must be an amd- or arm-64bit executable"
+        error "Unpacked file $(basename "${binary}") must be an amd- or arm-64bit executable"
         exit 1
     fi
 }
@@ -123,9 +127,7 @@ remove_tags() {
 }
 
 push_image() {
-
     heading "Pushing to remote registry"
-
     for tag in "${FULL_TAGS[@]}"; do
         green "Pushing to remote registry: ${tag}"
         buildah manifest push --all "${tag}"
@@ -133,7 +135,7 @@ push_image() {
 }
 
 determine_alpine_version() {
-    skopeo list-tags "${ALPINE_BASE}" | jq -rc 'Tags[]' | grep -E "^${ALPINE_MAJOR}" | sort -V | tail -n1
+    skopeo list-tags "docker://${ALPINE_BASE}" | jq -rc '.Tags[]' | grep -E "^${ALPINE_MAJOR}" | sort -V | tail -n1
 }
 
 save_alpine_version() {
@@ -146,15 +148,17 @@ if [ -z "${1:-}" ]; then
     exit 1
 fi
 
-if [ "${1}" == "latest-tag" ]; then
-    echo "${TAG_BASE}:latest"
-    exit
+if [ "${1}" = "login" ]; then
+    exec skopeo login --username zimagedk docker.io
+elif [ "${1}" = "logout" ]; then
+    exec skopeo logout docker.io
+elif [ "${1}" == "latest-tag" ]; then
+    exec echo "${TAG_BASE}:latest"
 elif [ "${1}" == "alpine-version-remote" ]; then
     determine_alpine_version
     exit
 elif [ "${1}" == "alpine-version-local" ]; then
-    echo "${KNOWN_VERSION}"
-    exit
+    exec echo "${KNOWN_VERSION}"
 fi
 
 VERSION="${1:-}"

@@ -54,7 +54,7 @@ RUNNER=podman
 if [ -z "${XDG_SESSION_ID:-}" ]; then
     RUNNER=docker
 else
-    RUN_ARGS+=(-ti)
+#    RUN_ARGS+=(-ti)
     # shellcheck disable=SC1090
     . "${HOME}/.profile"
 fi

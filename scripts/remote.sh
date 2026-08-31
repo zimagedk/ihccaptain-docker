@@ -28,14 +28,18 @@ if [ -r "${VERSION_FILE}" ]; then
     . "${VERSION_FILE}"
 fi
 
+log() {
+    echo "$(date --iso-8601=seconds) $*"
+}
+
 error() {
-    echo "$*" 1>&2
+    log "$*" 1>&2
 }
 
 usage() {
     echo """
   Usage: ${0} <command> <options>
-  
+
   Commands:
     known-version                   Return the current known version
     check-version                   Checks if there's a new version remote
@@ -53,7 +57,7 @@ get_release_file() {
     local url="${UPDATE_CHECK_URL}"
     local file
 
-    echo "Fetching binary: ${arch}"
+    log "Fetching binary: ${arch}"
 
     url="${url/@ARCH@/$arch}"
 
@@ -98,7 +102,7 @@ if $CHECK_VERSION; then
     if [ -z "${ver}" ] || [ "${ver}" = "${KNOWN_VERSION}" ]; then
         exit 1
     fi
-    echo "Found update remote: ${ver}"
+    log "Found update remote: ${ver}"
     exit 0
 fi
 
