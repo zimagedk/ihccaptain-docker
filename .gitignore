@@ -2,4 +2,5 @@
 /run
 /.latest_version
 /.alpine_version
+/.container_auth.json
 /data
