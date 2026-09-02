@@ -17,6 +17,10 @@ if [ -z "${WORKSPACE:-}" ]; then
     WORKSPACE="$(dirname "$(dirname "$(realpath "$0")")")"
 fi
 
+AUTH_ARGS=()
+if [ -r "${WORKSPACE}/.container_auth.json" ]; then
+    AUTH_ARGS+=(--authfile "${WORKSPACE}/.container_auth.json")
+fi
 VERSION_FILE="${WORKSPACE}/.alpine_version"
 TEMP_DIR="$(mktemp -d)"
 
@@ -130,12 +134,12 @@ push_image() {
     heading "Pushing to remote registry"
     for tag in "${FULL_TAGS[@]}"; do
         green "Pushing to remote registry: ${tag}"
-        buildah manifest push --all "${tag}"
+        buildah manifest push "${AUTH_ARGS[@]}" --all "${tag}"
     done
 }
 
 determine_alpine_version() {
-    skopeo list-tags "docker://${ALPINE_BASE}" | jq -rc '.Tags[]' | grep -E "^${ALPINE_MAJOR}" | sort -V | tail -n1
+    skopeo list-tags "${AUTH_ARGS[@]}" "docker://${ALPINE_BASE}" | jq -rc '.Tags[]' | grep -E "^${ALPINE_MAJOR}" | sort -V | tail -n1
 }
 
 save_alpine_version() {
@@ -149,9 +153,13 @@ if [ -z "${1:-}" ]; then
 fi
 
 if [ "${1}" = "login" ]; then
-    exec skopeo login --username zimagedk docker.io
+    if [ "${2:-}" = "here" ] && [ ! -r "${WORKSPACE}/.container_auth.json" ]; then
+        touch "${WORKSPACE}/.container_auth.json"
+        exec "${0}" login
+    fi
+    exec skopeo login "${AUTH_ARGS[@]}" --username zimagedk docker.io
 elif [ "${1}" = "logout" ]; then
-    exec skopeo logout docker.io
+    exec skopeo logout "${AUTH_ARGS[@]}" docker.io
 elif [ "${1}" == "latest-tag" ]; then
     exec echo "${TAG_BASE}:latest"
 elif [ "${1}" == "alpine-version-remote" ]; then
