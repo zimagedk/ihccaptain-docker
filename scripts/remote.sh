@@ -4,8 +4,7 @@
 
 set -euo pipefail
 
-# Change to none-beta when released
-GET_VERSION_URL="https://jemi.dk/ihc/beta/update.php"
+GET_VERSION_URL="https://jemi.dk/ihc/update.php"
 UPDATE_CHECK_URL="${GET_VERSION_URL}?v=0.0.0&os=linux&arch=@ARCH@"
 
 if [ -z "${WORKSPACE:-}" ]; then
